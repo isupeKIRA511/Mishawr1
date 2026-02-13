@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.marmot-cloud.com/npm/hylid-bridge/2.10.0/index.js"></script>
+
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>خطوطي - نقل مدرسي</title>
+</head>
+
+<body class="font-['Cairo'] bg-slate-50">
+    <script src="https://cdn.marmot-cloud.com/npm/hylid-bridge/2.10.0/index.js"></script>
+    
+    <!-- Mock Mini Program APIs for development -->
+    <script>
+        // Initialize mock APIs if my is not available (for browser testing)
+        if (typeof window !== 'undefined' && typeof my === 'undefined') {
+            window.my = {
+                getAuthCode: ({ scopes, success, fail }) => {
+                    setTimeout(() => {
+                        const mockCode = 'mock_auth_code_' + Date.now();
+                        if (success) {
+                            success({ authCode: mockCode });
+                        }
+                    }, 500);
+                },
+                alert: ({ content, title }) => {
+                    alert(title ? `${title}\n${content}` : content);
+                },
+                confirm: ({ title, content, confirmButtonText, cancelButtonText, success }) => {
+                    const result = window.confirm(title ? `${title}\n${content}` : content);
+                    if (success) {
+                        success({ confirm: result, ok: result });
+                    }
+                },
+                scan: ({ type, success, fail }) => {
+                    const code = prompt('Enter QR code (for testing):');
+                    if (code) {
+                        if (success) {
+                            success({ code: code });
+                        }
+                    } else {
+                        if (fail) {
+                            fail({ error: 'Scan cancelled' });
+                        }
+                    }
+                },
+                tradePay: ({ paymentUrl, success, fail }) => {
+                    if (paymentUrl) {
+                        window.open(paymentUrl, '_blank');
+                        if (success) {
+                            setTimeout(() => success({}), 100);
+                        }
+                    } else {
+                        if (fail) {
+                            fail({ error: 'No payment URL' });
+                        }
+                    }
+                },
+                showToast: ({ content, type }) => {
+                    const toast = document.createElement('div');
+                    toast.textContent = content;
+                    toast.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: ' + (type === 'success' ? '#10b981' : '#3b82f6') + '; color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 2000);
+                }
+            };
+            console.log('Mock Mini Program APIs initialized for development');
+        }
+    </script>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>
