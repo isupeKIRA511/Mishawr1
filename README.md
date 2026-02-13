@@ -1,26 +1,38 @@
-# Mini Landing (React + Tailwind)
+# Mishwar App (Project Mishwar1)
 
-Simple Vite + React + Tailwind starter with a landing page component.
+A transportation management application for students, drivers, and parents.
 
-How to run
+## Features
 
-1. Install dependencies:
+- **Student Dashboard**: Request rides, see upcoming trips, scan QR codes.
+- **Driver Dashboard**: View daily routes, manage student attendance.
+- **Parent Dashboard**: Track children, view attendance history, make payments.
+- **Authentication**: JWT-based login and registration.
 
-```bash
-npm install
-```
+## Getting Started
 
-2. Start dev server:
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
 
-```bash
-npm run dev
-```
+2.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
 
-Open the printed localhost URL (usually http://localhost:5173).
+3.  **Build for Production**:
+    ```bash
+    npm run build
+    ```
 
-Notes
-- Tailwind is configured via `tailwind.config.cjs` and PostCSS.
-- If you want me to run `npm install` and start the dev server for verification, tell me and I will run it.
-# mini-service
-# mini-service
-# mishwar
+## Project Structure
+
+- `src/components`: React components for each dashboard.
+- `src/api`: API service files (`auth.js`, `parent.js`, `student.js`, `driver.js`).
+- `src/App.jsx`: Main routing and layout.
+
+## API Integration
+
+The app connects to a backend API specified in `Mishwar API.yaml`.
+Base URL: `https://7bt3gzgt-8000.uks1.devtunnels.ms/api`
