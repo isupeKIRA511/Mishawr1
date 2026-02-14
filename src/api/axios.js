@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { resolveMockRequest } from './mockData';
 
 const api = axios.create({
     baseURL: 'https://7bt3gzgt-8000.uks1.devtunnels.ms/api/',
@@ -7,6 +8,10 @@ const api = axios.create({
         'Accept': 'application/json'
     }
 });
+
+// Use mock adapter: all requests are served from mock data with simulated delay.
+// Backend integration (baseURL, interceptors) is unchanged; only the transport is mocked.
+api.defaults.adapter = (config) => resolveMockRequest(config);
 
 api.interceptors.request.use(
     (config) => {
