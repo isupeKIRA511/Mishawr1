@@ -1,67 +1,119 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Star, User, Phone, CheckCircle, XCircle, Clock, CreditCard, QrCode, ChevronRight, LogOut, ArrowRight } from 'lucide-react';
+import { MapPin, Star, User, Phone, CheckCircle, XCircle, Clock, CreditCard, QrCode, ChevronRight, LogOut, ArrowRight, Loader2, Bus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { login, getMe } from '../api/auth';
-import { getMyRides } from '../api/student';
+import { getMe, logout } from '../api/auth';
+import { getMyRides, listDrivers, createSubscription, getMySubscriptions } from '../api/student';
+import { getDestinations } from '../api/destinations';
 
-const StudentDashboard = ({ userData, authCode, onBack, onScan, onPay }) => {
-    const [view, setView] = useState('login'); // login or dashboard
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [rating, setRating] = useState(0);
-
+const StudentDashboard = ({ authCode, onScan, onPay }) => {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState(null);
     const [rides, setRides] = useState([]);
     const [nextRide, setNextRide] = useState(null);
+    const [rating, setRating] = useState(0);
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
-        try {
-            await login(username, password);
-            const user = await getMe();
-            setCurrentUser(user);
-            setView('dashboard');
-        } catch (err) {
-            console.error(err);
-            setError('فشل تسجيل الدخول. تأكد من المعلومات.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Subscription Flow State
+    const [destinations, setDestinations] = useState([]);
+    const [availableDrivers, setAvailableDrivers] = useState([]);
+    const [subscriptions, setSubscriptions] = useState([]);
+    const [showSubscribeFlow, setShowSubscribeFlow] = useState(false);
+    const [selectedDestination, setSelectedDestination] = useState(null);
+    const [loadingDrivers, setLoadingDrivers] = useState(false);
+    const [subscribing, setSubscribing] = useState(false);
 
     useEffect(() => {
-        if (view === 'dashboard' && currentUser) {
-            fetchRides();
-        }
-    }, [view, currentUser]);
+        const initDashboard = async () => {
+            try {
+                const user = await getMe();
+                setCurrentUser(user);
+                await Promise.all([fetchRides(), fetchSubscriptions(), fetchDestinations()]);
+            } catch (err) {
+                console.error("Auth failed", err);
+                navigate('/login');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const fetchSubscriptions = async () => {
+            try {
+                const subs = await getMySubscriptions();
+                setSubscriptions(subs);
+                // If user has no active subscription, show subscribe flow
+                if (!subs || subs.length === 0) {
+                    setShowSubscribeFlow(true);
+                }
+            } catch (err) { console.error(err); }
+        };
+
+        const fetchDestinations = async () => {
+            try {
+                const dests = await getDestinations();
+                setDestinations(dests);
+            } catch (err) { console.error(err); }
+        };
+
+        initDashboard();
+    }, [navigate]);
 
     const fetchRides = async () => {
         try {
             const data = await getMyRides();
-            // Filter future rides
             const upcoming = data.filter(r => new Date(r.date + 'T' + r.pickup_time) >= new Date());
-            // Sort by date/time
             upcoming.sort((a, b) => new Date(a.date + 'T' + a.pickup_time) - new Date(b.date + 'T' + b.pickup_time));
-
             setRides(data);
             if (upcoming.length > 0) {
                 setNextRide(upcoming[0]);
             }
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
     }
 
+    const handleDestinationSelect = async (destination) => {
+        setSelectedDestination(destination);
+        setLoadingDrivers(true);
+        try {
+            const drivers = await listDrivers(destination);
+            setAvailableDrivers(drivers);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingDrivers(false);
+        }
+    };
+
+    const handleSubscribe = async (driver) => {
+        if (!confirm(`هل أنت متأكد من الاشتراك مع الكابتن ${driver.user.first_name || 'سائق'}؟`)) return;
+
+        setSubscribing(true);
+        try {
+            // Hardcoded location for now as per minimal requirements, in real app use Geolocation API
+            const payload = {
+                driver_id: driver.id,
+                weekdays: [0, 1, 2, 3, 4], // Sun-Thu
+                pickup_latitude: 33.3152,
+                pickup_longitude: 44.3661
+            };
+            await createSubscription(payload);
+            alert("تم الاشتراك بنجاح!");
+            setShowSubscribeFlow(false);
+            fetchRides();
+        } catch (err) {
+            console.error("Subscription Error:", err);
+            if (err.response) {
+                console.error("Error Response Data:", err.response.data);
+                console.error("Error Status:", err.response.status);
+                alert(`فشل الاشتراك: ${err.response.data.message || JSON.stringify(err.response.data.errors) || 'خطأ غير معروف'}`);
+            } else {
+                alert("فشل الاشتراك. حاول مرة أخرى.");
+            }
+        } finally {
+            setSubscribing(false);
+        }
+    };
 
     const handleCheckIn = async () => {
-        // Implement real check-in if API supports it.
-        // For now, since API doc doesn't specify, maybe just a toast or "notify-parent" logic if backend supported it.
-        // Or update ride status if allowed? Passenger usually doesn't update status to picked-up, Driver does.
-        // Let's keep the user's simulation logic but warn if it fails.
         alert("خاصية إرسال إشعار لولي الأمر (تجريبية)");
     };
 
@@ -69,68 +121,99 @@ const StudentDashboard = ({ userData, authCode, onBack, onScan, onPay }) => {
         setRating(value);
     };
 
-    if (view === 'login') {
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    if (loading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-['Cairo']" dir="rtl">
-                <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden">
-                    <div className="bg-blue-600 p-8 text-center">
-                        <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-                            <User className="w-10 h-10 text-white" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-white mb-2">تسجيل دخول الطالب</h2>
-                        <p className="text-blue-100">أدخل بيانات الحساب للمتابعة</p>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="p-8 space-y-6">
-                        {error && (
-                            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-center text-sm">
-                                {error}
-                            </div>
-                        )}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">اسم المستخدم</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-right"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">كلمة المرور</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-right"
-                                required
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className={`w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all duration-300 flex items-center justify-center ${loading ? 'opacity-70' : ''}`}
-                        >
-                            {loading ? 'جاري التحقق...' : 'تسجيل الدخول'}
-                            {!loading && <ArrowRight className="mr-2 w-5 h-5" />}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="w-full py-2 text-slate-400 text-sm hover:text-slate-600 transition-colors"
-                        >
-                            العودة للشاشة الرئيسية
-                        </button>
-                    </form>
-                </div>
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
             </div>
         );
     }
 
-    // Dashboard View
+    // --- SUBSCRIPTION FLOW VIEW ---
+    if (showSubscribeFlow && subscriptions.length === 0) {
+        return (
+            <div className="min-h-screen bg-slate-50 p-6 font-['Cairo']" dir="rtl">
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-6">
+                    <h1 className="text-xl font-bold text-slate-900 mb-2">مرحباً {currentUser?.first_name}</h1>
+                    <p className="text-slate-500">للبدء، يرجى اختيار وجهتك والاشتراك مع سائق.</p>
+                </div>
+
+                {!selectedDestination ? (
+                    <div className="space-y-4">
+                        <h2 className="font-bold text-slate-700">اختر الوجهة</h2>
+                        {destinations.map(dest => (
+                            <button
+                                key={dest.id}
+                                onClick={() => handleDestinationSelect(dest.name)}
+                                className="w-full p-4 bg-white rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between hover:border-blue-500 hover:bg-blue-50 transition-all"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                                        <MapPin size={20} />
+                                    </div>
+                                    <span className="font-bold text-slate-800">{dest.name}</span>
+                                </div>
+                                <ChevronRight className="text-slate-400" />
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <button onClick={() => setSelectedDestination(null)} className="text-sm text-blue-600 font-bold mb-2">تغيير الوجهة</button>
+                        <h2 className="font-bold text-slate-700">السائقين المتوفرين</h2>
+
+                        {loadingDrivers ? (
+                            <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-600" /></div>
+                        ) : availableDrivers.length === 0 ? (
+                            <p className="text-slate-500 text-center py-8">لا يوجد سائقين لهذه الوجهة حالياً.</p>
+                        ) : (
+                            availableDrivers.map(driver => (
+                                <div key={driver.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+                                            {driver.profile_picture ? (
+                                                <img src={driver.profile_picture} alt="Driver" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="text-slate-400" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-slate-900">{driver.user.first_name} {driver.user.last_name}</h3>
+                                            <p className="text-xs text-slate-500">{driver.vehicle_model} | {driver.capacity} مقاعد</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl mb-3">
+                                        <span className="text-slate-500 text-sm">الاشتراك الشهري</span>
+                                        <span className="font-bold text-blue-600">{driver.subscription?.amount ? Number(driver.subscription.amount).toLocaleString() : '---'} د.ع</span>
+                                    </div>
+                                    <button
+                                        onClick={() => handleSubscribe(driver)}
+                                        disabled={subscribing}
+                                        className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50"
+                                    >
+                                        {subscribing ? 'جاري الاشتراك...' : 'اشترك الآن'}
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+
+                <button
+                    onClick={handleLogout}
+                    className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700"
+                >
+                    تسجيل الخروج
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-slate-50 relative pb-20 font-['Cairo']" dir="rtl">
 
@@ -141,10 +224,10 @@ const StudentDashboard = ({ userData, authCode, onBack, onScan, onPay }) => {
 
                 <div className="flex items-center gap-4 relative z-10">
                     <button
-                        onClick={onBack}
+                        onClick={handleLogout}
                         className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/30 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
                     >
-                        <ChevronRight size={24} />
+                        <LogOut size={20} />
                     </button>
                     <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/30 flex items-center justify-center text-white">
                         <User size={32} />

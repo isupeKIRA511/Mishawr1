@@ -1,39 +1,45 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { User, Bus, Users, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { registerUser } from '../api/auth';
 
-const Register = ({ onBack, onRegisterSuccess }) => {
+const Register = () => {
+    const navigate = useNavigate();
     const [role, setRole] = useState('PASSENGER'); // PASSENGER, DRIVER, PARENT
     const [formData, setFormData] = useState({
         username: '',
+        email: '',
         password: '',
         confirmPassword: '',
-        email: '',
-        phone_number: '',
         first_name: '',
-        last_name: ''
+        last_name: '',
+        phone_number: ''
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        setFormData({
+            ...formData,
+            [e.target.name]: e.target.value
+        });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLoading(true);
+        setError('');
+
         if (formData.password !== formData.confirmPassword) {
             setError("كلمات المرور غير متطابقة");
             return;
         }
-        setLoading(true);
-        setError('');
 
         try {
             const payload = {
                 username: formData.username,
-                password: formData.password,
                 email: formData.email,
+                password: formData.password,
                 first_name: formData.first_name,
                 last_name: formData.last_name,
                 phone_number: formData.phone_number,
@@ -41,7 +47,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
             };
             await registerUser(payload);
             alert("تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول.");
-            if (onRegisterSuccess) onRegisterSuccess(role);
+            navigate('/login');
         } catch (err) {
             console.error(err);
             setError("فشل إنشاء الحساب. تأكد من صحة البيانات أو حاول مرة أخرى.");
@@ -52,15 +58,14 @@ const Register = ({ onBack, onRegisterSuccess }) => {
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-['Cairo']" dir="rtl">
-            <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl overflow-hidden">
-                <div className="bg-slate-900 p-8 text-center text-white">
+            <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl overflow-hidden">
+                <div className="bg-blue-600 p-6 text-center text-white">
                     <h2 className="text-2xl font-bold mb-2">إنشاء حساب جديد</h2>
-                    <p className="text-slate-400">اختر نوع الحساب وأدخل بياناتك</p>
+                    <p className="text-blue-100">اختر نوع الحساب وأدخل بياناتك</p>
                 </div>
 
-                <div className="p-8">
-                    {/* Role Selection */}
-                    <div className="grid grid-cols-3 gap-3 mb-8">
+                <div className="p-6">
+                    <div className="grid grid-cols-3 gap-4 mb-8">
                         <button
                             type="button"
                             onClick={() => setRole('PASSENGER')}
@@ -68,7 +73,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                 }`}
                         >
                             <User className="mb-2" />
-                            <span className="text-sm font-bold">طالب/راكب</span>
+                            <span className="text-xs font-bold">طالب</span>
                         </button>
                         <button
                             type="button"
@@ -77,7 +82,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                 }`}
                         >
                             <Bus className="mb-2" />
-                            <span className="text-sm font-bold">سائق</span>
+                            <span className="text-xs font-bold">سائق</span>
                         </button>
                         <button
                             type="button"
@@ -86,7 +91,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                 }`}
                         >
                             <Users className="mb-2" />
-                            <span className="text-sm font-bold">ولي أمر</span>
+                            <span className="text-xs font-bold">ولي أمر</span>
                         </button>
                     </div>
 
@@ -96,7 +101,6 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                 {error}
                             </div>
                         )}
-
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">الاسم الأول</label>
@@ -105,7 +109,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                     name="first_name"
                                     value={formData.first_name}
                                     onChange={handleChange}
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                                     required
                                 />
                             </div>
@@ -116,7 +120,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                     name="last_name"
                                     value={formData.last_name}
                                     onChange={handleChange}
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                                     required
                                 />
                             </div>
@@ -129,7 +133,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                 name="username"
                                 value={formData.username}
                                 onChange={handleChange}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                                 required
                             />
                         </div>
@@ -141,19 +145,19 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                 name="email"
                                 value={formData.email}
                                 onChange={handleChange}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                                 required
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">رقم الهاتف (+964...)</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">رقم الهاتف</label>
                             <input
                                 type="text"
                                 name="phone_number"
                                 value={formData.phone_number}
                                 onChange={handleChange}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 text-left"
                                 placeholder="+9647..."
                                 dir="ltr"
                                 required
@@ -168,7 +172,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                     name="password"
                                     value={formData.password}
                                     onChange={handleChange}
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                                     required
                                 />
                             </div>
@@ -179,7 +183,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                                     name="confirmPassword"
                                     value={formData.confirmPassword}
                                     onChange={handleChange}
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
                                     required
                                 />
                             </div>
@@ -188,7 +192,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"
+                            className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"
                         >
                             {loading ? 'جاري التسجيل...' : 'إنشاء الحساب'}
                             {!loading && <CheckCircle2 size={20} />}
@@ -196,7 +200,7 @@ const Register = ({ onBack, onRegisterSuccess }) => {
 
                         <button
                             type="button"
-                            onClick={onBack}
+                            onClick={() => navigate('/login')}
                             className="w-full py-2 text-slate-400 text-sm hover:text-slate-600 transition-colors"
                         >
                             العودة

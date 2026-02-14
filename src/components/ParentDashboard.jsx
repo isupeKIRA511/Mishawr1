@@ -3,95 +3,60 @@ import {
     MapPin,
     Calendar,
     CreditCard,
-    AlertTriangle,
-    Star,
-    LogOut,
     User,
     Navigation,
     CheckCircle2,
-    XCircle,
-    Clock,
-    ArrowRight
+    LogOut,
+    Loader2,
+    PlusCircle
 } from 'lucide-react';
-import { login, getMe, registerUser } from '../api/auth';
-import { getUser, getRides, getSubscriptions, updateRideStatus, paySubscription } from '../api/parent';
+import { useNavigate } from 'react-router-dom';
+import { getMe, logout, linkPassenger } from '../api/auth';
+import { getUser, getRides, getSubscriptions, updateRideStatus, paySubscription, cancelRide } from '../api/parent';
 
-const ParentDashboard = ({ onBack, onPay }) => {
-    const [view, setView] = useState('login'); // login, register, dashboard
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('');
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
-
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [activeTab, setActiveTab] = useState('tracking');
+const ParentDashboard = ({ onPay }) => {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState(null);
 
     // Data state
+    const [activeTab, setActiveTab] = useState('tracking');
     const [children, setChildren] = useState([]);
     const [selectedChild, setSelectedChild] = useState(null);
     const [rides, setRides] = useState([]);
     const [subscriptions, setSubscriptions] = useState([]);
     const [walletAmount, setWalletAmount] = useState(0);
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
-        try {
-            await login(username, password);
-            const user = await getMe();
+    // Link Child State
+    const [showRxLink, setShowRxLink] = useState(false);
+    const [uniqueIdInput, setUniqueIdInput] = useState('');
 
-            // Get children details
-            // The API returns an array of child IDs in user.children
-            if (user.children && user.children.length > 0) {
-                const childPromises = user.children.map(id => getUser(id));
-                const childrenData = await Promise.all(childPromises);
-                setChildren(childrenData);
-                setSelectedChild(childrenData[0]);
-            } else {
-                setChildren([]); // No children linked
+    useEffect(() => {
+        const initDashboard = async () => {
+            try {
+                const user = await getMe();
+                setCurrentUser(user);
+
+                if (user.children && user.children.length > 0) {
+                    // Fetch details for all children
+                    const childrenData = await Promise.all(
+                        user.children.map(childId => getUser(childId))
+                    );
+                    setChildren(childrenData);
+                    setSelectedChild(childrenData[0]);
+                } else {
+                    setChildren([]);
+                }
+            } catch (err) {
+                console.error("Auth failed", err);
+                navigate('/login');
+            } finally {
+                setLoading(false);
             }
+        };
 
-            setView('dashboard');
-        } catch (err) {
-            console.error(err);
-            setError('فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleRegister = async (e) => {
-        e.preventDefault();
-        if (password !== confirmPassword) {
-            setError("كلمات المرور غير متطابقة");
-            return;
-        }
-        setLoading(true);
-        setError('');
-        try {
-            await registerUser({
-                username,
-                password,
-                email,
-                first_name: firstName,
-                last_name: lastName,
-                phone_number: phone,
-                role: 'PARENT'
-            });
-            alert("تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.");
-            setView('login');
-        } catch (err) {
-            console.error(err);
-            setError("فشل إنشاء الحساب. تأكد من صحة البيانات أو حاول مرة أخرى.");
-        } finally {
-            setLoading(false);
-        }
-    };
+        initDashboard();
+    }, [navigate]);
 
     // Fetch data when selected child changes
     useEffect(() => {
@@ -99,15 +64,15 @@ const ParentDashboard = ({ onBack, onPay }) => {
 
         const fetchData = async () => {
             try {
-                // Fetch rides (for attendance and tracking)
+                // Fetch rides
                 const ridesData = await getRides(selectedChild.id);
                 setRides(ridesData || []);
 
-                // Fetch subscriptions (for wallet)
+                // Fetch subscriptions
                 const subsData = await getSubscriptions(selectedChild.id);
                 setSubscriptions(subsData || []);
 
-                // Calculate wallet amount (sum of pending subscriptions)
+                // Calculate wallet amount
                 const totalDue = subsData
                     .filter(sub => sub.payment_status === 'PENDING' || sub.payment_status === 'OVERDUE')
                     .reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
@@ -121,16 +86,27 @@ const ParentDashboard = ({ onBack, onPay }) => {
         fetchData();
     }, [selectedChild]);
 
+    const handleLinkChild = async (e) => {
+        e.preventDefault();
+        try {
+            await linkPassenger(uniqueIdInput);
+            alert("تم ربط الطالب بنجاح!");
+            // Refresh
+            window.location.reload();
+        } catch (err) {
+            alert("فشل الربط. تأكد من الرمز.");
+        }
+    };
+
     const handleWontAttend = async () => {
         if (!selectedChild) return;
-        // Find today's ride
         const today = new Date().toISOString().split('T')[0];
-        const todaysRide = rides.find(r => r.date === today && r.status === 'SCHEDULED');
+        const todaysRide = rides.find(r => r.date === today && (r.status === 'SCHEDULED' || r.status === 'REASSIGNED'));
 
         if (todaysRide) {
             if (confirm(`هل أنت متأكد أن ${selectedChild.first_name || selectedChild.username} لن يحضر اليوم؟`)) {
                 try {
-                    await updateRideStatus(todaysRide.id, 'CANCELLED');
+                    await cancelRide(todaysRide.id);
                     alert('تم تحديث الحالة بنجاح.');
                     // Refresh data
                     const ridesData = await getRides(selectedChild.id);
@@ -145,215 +121,34 @@ const ParentDashboard = ({ onBack, onPay }) => {
     };
 
     const handlePayment = async () => {
-        // Pay for the first pending subscription as example
         const pendingSub = subscriptions.find(sub => sub.payment_status === 'PENDING' || sub.payment_status === 'OVERDUE');
         if (pendingSub) {
-            try {
-                await paySubscription(pendingSub.id);
-                alert('تم الدفع بنجاح!');
-                // Refresh
-                const subsData = await getSubscriptions(selectedChild.id);
-                setSubscriptions(subsData);
-                setWalletAmount(0); // Assuming full payment or recalculate
-            } catch (err) {
-                alert('فشل الدفع.');
+            if (confirm(`دفع ${Number(pendingSub.amount).toLocaleString()} د.ع عن اشتراك الفترة ${pendingSub.start_date}؟`)) {
+                try {
+                    await paySubscription(pendingSub.id);
+                    alert('تم الدفع بنجاح!');
+                    // Refresh
+                    const subsData = await getSubscriptions(selectedChild.id);
+                    setSubscriptions(subsData);
+                    setWalletAmount(0); // Update/Recalculate
+                } catch (err) {
+                    alert('فشل الدفع.');
+                }
             }
         } else {
-            onPay?.(); // Fallback to provided prop if no specific subscription found or custom logic
+            alert("لا توجد مبالغ مستحقة.");
         }
     };
 
-    if (view === 'login') {
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    if (loading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-['Cairo']" dir="rtl">
-                <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden">
-                    <div className="bg-purple-600 p-8 text-center">
-                        <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-                            <User className="w-10 h-10 text-white" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-white mb-2">تسجيل دخول ولي الأمر</h2>
-                        <p className="text-purple-100">أدخل بيانات الحساب للمتابعة</p>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="p-8 space-y-6">
-                        {error && (
-                            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-center text-sm">
-                                {error}
-                            </div>
-                        )}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">اسم المستخدم</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all text-right"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">كلمة المرور</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all text-right"
-                                required
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className={`w-full py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-lg shadow-purple-200 transition-all duration-300 flex items-center justify-center ${loading ? 'opacity-70' : ''}`}
-                        >
-                            {loading ? 'جاري التحقق...' : 'تسجيل الدخول'}
-                            {!loading && <ArrowRight className="mr-2 w-5 h-5" />}
-                        </button>
-
-                        <div className="text-center mt-4">
-                            <button
-                                type="button"
-                                onClick={() => setView('register')}
-                                className="text-purple-600 text-sm hover:underline"
-                            >
-                                ليس لديك حساب؟ إنشاء حساب جديد
-                            </button>
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="w-full py-2 text-slate-400 text-sm hover:text-slate-600 transition-colors"
-                        >
-                            العودة للشاشة الرئيسية
-                        </button>
-                    </form>
-                </div>
-            </div>
-        );
-    }
-
-    if (view === 'register') {
-        return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-['Cairo']" dir="rtl">
-                <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden">
-                    <div className="bg-purple-600 p-8 text-center">
-                        <h2 className="text-2xl font-bold text-white mb-2">إنشاء حساب ولي أمر</h2>
-                        <p className="text-purple-100">املأ البيانات لإنشاء حساب جديد</p>
-                    </div>
-
-                    <form onSubmit={handleRegister} className="p-8 space-y-4">
-                        {error && (
-                            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-center text-sm">
-                                {error}
-                            </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">الاسم الأول</label>
-                                <input
-                                    type="text"
-                                    value={firstName}
-                                    onChange={(e) => setFirstName(e.target.value)}
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">الاسم الأخير</label>
-                                <input
-                                    type="text"
-                                    value={lastName}
-                                    onChange={(e) => setLastName(e.target.value)}
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">اسم المستخدم</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">البريد الإلكتروني</label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">رقم الهاتف (+9647...)</label>
-                            <input
-                                type="text"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                placeholder="+9647..."
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">كلمة المرور</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">تأكيد كلمة المرور</label>
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-right"
-                                required
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className={`w-full py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-lg shadow-purple-200 transition-all duration-300 flex items-center justify-center ${loading ? 'opacity-70' : ''}`}
-                        >
-                            {loading ? 'جاري التسجيل...' : 'إنشاء حساب'}
-                        </button>
-
-                        <div className="text-center mt-2">
-                            <button
-                                type="button"
-                                onClick={() => setView('login')}
-                                className="text-purple-600 text-sm hover:underline"
-                            >
-                                لديك حساب بالفعل؟ تسجيل الدخول
-                            </button>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="w-full py-2 text-slate-400 text-sm hover:text-slate-600 transition-colors"
-                        >
-                            العودة للشاشة الرئيسية
-                        </button>
-                    </form>
-                </div>
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="w-10 h-10 animate-spin text-purple-600" />
             </div>
         );
     }
@@ -364,7 +159,7 @@ const ParentDashboard = ({ onBack, onPay }) => {
             <div className="bg-white shadow-sm sticky top-0 z-10">
                 <div className="max-w-md mx-auto px-4 py-4 flex justify-between items-center">
                     <div>
-                        <h1 className="text-lg font-bold text-slate-900">مرحباً، {username}</h1>
+                        <h1 className="text-lg font-bold text-slate-900">مرحباً، {currentUser?.first_name || currentUser?.username}</h1>
                         <div className="flex items-center text-sm text-slate-500 mt-1">
                             <span>يتابع:</span>
                             {children.length > 0 ? (
@@ -383,14 +178,30 @@ const ParentDashboard = ({ onBack, onPay }) => {
                                     ))}
                                 </select>
                             ) : (
-                                <span className="mr-2 text-red-500">لا يوجد أبناء مرتبطين</span>
+                                <span className="mr-2 text-red-500">لا يوجد أبناء</span>
                             )}
+                            <button onClick={() => setShowRxLink(!showRxLink)} className="mr-2 text-blue-600"><PlusCircle size={16} /></button>
                         </div>
                     </div>
-                    <button onClick={onBack} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
+                    <button onClick={handleLogout} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
                         <LogOut className="w-5 h-5" />
                     </button>
                 </div>
+
+                {showRxLink && (
+                    <div className="px-4 pb-4 animate-in slide-in-from-top-2">
+                        <form onSubmit={handleLinkChild} className="flex gap-2">
+                            <input
+                                type="text"
+                                placeholder="أدخل رمز الطالب (Unique ID)"
+                                className="flex-1 p-2 border rounded-lg text-sm"
+                                value={uniqueIdInput}
+                                onChange={e => setUniqueIdInput(e.target.value)}
+                            />
+                            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold">ربط</button>
+                        </form>
+                    </div>
+                )}
             </div>
 
             <div className="max-w-md mx-auto p-4 space-y-6">

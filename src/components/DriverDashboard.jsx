@@ -1,45 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { User, MapPin, CheckCircle, XCircle, MoreVertical, LogOut, Phone, ChevronRight, ArrowRight, Loader2 } from 'lucide-react';
-import { login, getMe } from '../api/auth';
-import { getMyRides, updateRideStatus, getMyDriverProfile } from '../api/driver';
+import { User, MapPin, CheckCircle, LogOut, Loader2, FileText, Bus, Car } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getMe, logout } from '../api/auth';
+import { getMyRides, updateRideStatus, getMyDriverProfile, registerDriverProfile } from '../api/driver';
+import { getDestinations } from '../api/destinations';
 
-const DriverDashboard = ({ onAuthenticate, onPay, onScan, garageName, parkingTime, scannedCode, showGarageDetails, onCloseGarageDetails, onBack }) => {
-    const [view, setView] = useState('login'); // login or dashboard
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
+const DriverDashboard = ({ onScan }) => {
+    const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState(null);
-    const [students, setStudents] = useState([]); // This will hold the rides for today
+    const [driverProfile, setDriverProfile] = useState(null);
+    const [students, setStudents] = useState([]);
     const [loadingData, setLoadingData] = useState(false);
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
-        try {
-            await login(username, password);
-            const user = await getMe();
-            setCurrentUser(user);
-
-            // Check if driver profile exists, maybe needed
-            // const driverProfile = await getMyDriverProfile();
-
-            setView('dashboard');
-        } catch (err) {
-            console.error(err);
-            setError('فشل تسجيل الدخول. تأكد من المعلومات.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Profile Creation State
+    const [destinations, setDestinations] = useState([]);
+    const [profileData, setProfileData] = useState({
+        vehicle_model: '',
+        license_plate: '',
+        license_number: '',
+        destination: '',
+        zone: 1,
+        capacity: 4
+    });
+    const [idPicture, setIdPicture] = useState(null);
+    const [profilePicture, setProfilePicture] = useState(null);
+    const [submittingProfile, setSubmittingProfile] = useState(false);
 
     useEffect(() => {
-        if (view === 'dashboard') {
-            fetchTodayRides();
-        }
-    }, [view]);
+        const initDashboard = async () => {
+            try {
+                const user = await getMe();
+                setCurrentUser(user);
+
+                // Check for driver profile
+                const profile = await getMyDriverProfile();
+                setDriverProfile(profile);
+
+                if (profile) {
+                    fetchTodayRides();
+                } else {
+                    // Fetch destinations for profile form
+                    fetchDestinations();
+                }
+
+            } catch (err) {
+                console.error("Auth failed", err);
+                navigate('/login');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const fetchDestinations = async () => {
+            try {
+                const dests = await getDestinations();
+                setDestinations(dests);
+                if (dests.length > 0) setProfileData(prev => ({ ...prev, destination: dests[0].name }));
+            } catch (err) { console.error(err); }
+        };
+
+        initDashboard();
+    }, [navigate]);
 
     const fetchTodayRides = async () => {
         setLoadingData(true);
@@ -49,15 +71,14 @@ const DriverDashboard = ({ onAuthenticate, onPay, onScan, garageName, parkingTim
             const today = new Date().toISOString().split('T')[0];
             const todaysRides = data.filter(r => r.date === today);
 
-            // Map to the structure used in UI
             const mappedStudents = todaysRides.map(ride => ({
                 id: ride.id,
                 name: ride.rider_details?.user?.first_name
                     ? `${ride.rider_details.user.first_name} ${ride.rider_details.user.last_name || ''}`
                     : (ride.rider_details?.user?.username || 'Unknown'),
-                location: ride.destination_details?.name || 'موقع غير محدد', // Or rider address if available
+                location: ride.destination_details?.name || 'موقع غير محدد',
                 status: ride.status === 'COMPLETED' ? 'present' : (ride.status === 'CANCELLED' ? 'absent' : 'pending'),
-                paid: true, // Need check subscription payment status if available in ride details
+                paid: true,
                 originalRide: ride
             }));
 
@@ -72,111 +93,149 @@ const DriverDashboard = ({ onAuthenticate, onPay, onScan, garageName, parkingTim
 
 
     const toggleStatus = async (id, currentStatus) => {
-        // Toggle between COMPLETED (present) and SCHEDULED/pending.
-        // If it's already present (COMPLETED), maybe we don't want to toggle back to pending easily?
-        // Or if 'absent' (CANCELLED), maybe can't toggle?
-
-        // Let's assume the button marks as Present (COMPLETED) if pending.
         const student = students.find(s => s.id === id);
         if (!student) return;
 
+        // If already completed, maybe don't toggle back in this simple specific flow, or allow undo
         let newStatus = '';
         if (student.status === 'pending') newStatus = 'COMPLETED';
-        else if (student.status === 'present') newStatus = 'SCHEDULED'; // Undo?
 
-        if (!newStatus) return; // Don't toggle absent ones for now
+        if (!newStatus) return;
 
         // Optimistic update
         const oldStatus = student.status;
-        setStudents(students.map(s => s.id === id ? { ...s, status: newStatus === 'COMPLETED' ? 'present' : 'pending' } : s));
+        setStudents(students.map(s => s.id === id ? { ...s, status: 'present' } : s));
 
         try {
             await updateRideStatus(id, newStatus);
         } catch (err) {
             console.error("Failed to update status", err);
-            // Revert
             setStudents(students.map(s => s.id === id ? { ...s, status: oldStatus } : s));
             alert("فشل تحديث الحالة");
         }
     };
 
-    const handleSubstituteRequest = () => {
-        const content = "السائق الحالي لا يمكنه توصيل الطلاب حالياً ويريد إرسال سائق بديل.";
+    const handleProfileChange = (e) => {
+        setProfileData({ ...profileData, [e.target.name]: e.target.value });
+    };
 
-        if (typeof my !== 'undefined' && my.confirm) {
-            my.confirm({
-                title: 'تأكيد طلب سائق بديل',
-                content: content,
-                confirmButtonText: 'تأكيد الطلب',
-                cancelButtonText: 'إلغاء',
-                success: (res) => {
-                    if (res.confirm) {
-                        if (my.showToast) my.showToast({ content: 'تم رفع الطلب للإدارة', type: 'success' });
-                        else my.alert({ content: 'تم رفع الطلب للإدارة' });
-                    }
-                }
-            });
-        } else {
-            if (confirm(content)) {
-                alert('تم رفع الطلب للإدارة');
-            }
+    const handleProfileSubmit = async (e) => {
+        e.preventDefault();
+        setSubmittingProfile(true);
+
+        try {
+            const formData = new FormData();
+            formData.append('vehicle_model', profileData.vehicle_model);
+            formData.append('license_plate', profileData.license_plate);
+            formData.append('license_number', profileData.license_number);
+            formData.append('destination', profileData.destination);
+            formData.append('zone', profileData.zone);
+            formData.append('capacity', profileData.capacity);
+            formData.append('available_weekdays', JSON.stringify([0, 1, 2, 3, 4])); // Default weekdays
+
+            if (idPicture) formData.append('id_picture', idPicture);
+            if (profilePicture) formData.append('profile_picture', profilePicture);
+
+            const profile = await registerDriverProfile(formData);
+            setDriverProfile(profile);
+            alert("تم إرسال بياناتك بنجاح! حسابك قيد المراجعة.");
+            // Refresh to show dashboard (empty rides initially)
+            fetchTodayRides();
+
+        } catch (err) {
+            console.error(err);
+            alert("فشل الحفظ. تأكد من جميع البيانات.");
+        } finally {
+            setSubmittingProfile(false);
+        }
+    };
+
+
+    const handleSubstituteRequest = () => {
+        if (confirm("هل تريد طلب سائق بديل؟")) {
+            alert('تم رفع الطلب للإدارة');
         }
     }
 
-    if (view === 'login') {
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    if (loading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-['Cairo']" dir="rtl">
-                <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden">
-                    <div className="bg-green-600 p-8 text-center">
-                        <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-                            <User className="w-10 h-10 text-white" />
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="w-10 h-10 animate-spin text-green-600" />
+            </div>
+        );
+    }
+
+    // --- COMPLETE PROFILE VIEW ---
+    if (!driverProfile) {
+        return (
+            <div className="min-h-screen bg-slate-50 font-['Cairo'] p-4" dir="rtl">
+                <div className="max-w-md mx-auto bg-white rounded-3xl shadow-sm p-6">
+                    <div className="text-center mb-6">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600">
+                            <Car size={32} />
                         </div>
-                        <h2 className="text-2xl font-bold text-white mb-2">تسجيل دخول السائق</h2>
-                        <p className="text-green-100">أدخل بيانات الحساب للمتابعة</p>
+                        <h1 className="text-xl font-bold text-slate-800">إكمال ملف السائق</h1>
+                        <p className="text-slate-500 text-sm">يرجى تعبئة بيانات المركبة للبدء بالعمل</p>
                     </div>
 
-                    <form onSubmit={handleLogin} className="p-8 space-y-6">
-                        {error && (
-                            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-center text-sm">
-                                {error}
-                            </div>
-                        )}
+                    <form onSubmit={handleProfileSubmit} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">اسم المستخدم</label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all text-right"
-                                required
-                            />
+                            <label className="block text-sm font-medium text-slate-700 mb-1">نوع السيارة وموديلها</label>
+                            <input type="text" name="vehicle_model" required onChange={handleProfileChange} className="w-full p-3 border rounded-xl bg-slate-50" placeholder="مثال: تويوتا كامري 2020" />
                         </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">رقم اللوحة</label>
+                                <input type="text" name="license_plate" required onChange={handleProfileChange} className="w-full p-3 border rounded-xl bg-slate-50" placeholder="بغداد ..." />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">رقم الإجازة</label>
+                                <input type="text" name="license_number" required onChange={handleProfileChange} className="w-full p-3 border rounded-xl bg-slate-50" />
+                            </div>
+                        </div>
+
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">كلمة المرور</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all text-right"
-                                required
-                            />
+                            <label className="block text-sm font-medium text-slate-700 mb-1">خط الوجهة</label>
+                            <select name="destination" required onChange={handleProfileChange} className="w-full p-3 border rounded-xl bg-slate-50">
+                                {destinations.map(d => (
+                                    <option key={d.id} value={d.name}>{d.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">المنطقة السكنية (Zone ID)</label>
+                                <input type="number" name="zone" required onChange={handleProfileChange} className="w-full p-3 border rounded-xl bg-slate-50" placeholder="1" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">عدد المقاعد</label>
+                                <input type="number" name="capacity" required onChange={handleProfileChange} value={profileData.capacity} className="w-full p-3 border rounded-xl bg-slate-50" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">صورة الإجازة / الهوية</label>
+                            <input type="file" accept="image/*" onChange={(e) => setIdPicture(e.target.files[0])} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">صورة شخصية (اختياري)</label>
+                            <input type="file" accept="image/*" onChange={(e) => setProfilePicture(e.target.files[0])} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                         </div>
 
                         <button
                             type="submit"
-                            disabled={loading}
-                            className={`w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg shadow-green-200 transition-all duration-300 flex items-center justify-center ${loading ? 'opacity-70' : ''}`}
+                            disabled={submittingProfile}
+                            className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold shadow-lg hover:bg-slate-800 disabled:opacity-50"
                         >
-                            {loading ? 'جاري التحقق...' : 'تسجيل الدخول'}
-                            {!loading && <ArrowRight className="mr-2 w-5 h-5" />}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={onBack}
-                            className="w-full py-2 text-slate-400 text-sm hover:text-slate-600 transition-colors"
-                        >
-                            العودة للشاشة الرئيسية
+                            {submittingProfile ? 'جاري الحفظ...' : 'حفظ البيانات'}
                         </button>
                     </form>
                 </div>
@@ -184,7 +243,7 @@ const DriverDashboard = ({ onAuthenticate, onPay, onScan, garageName, parkingTim
         );
     }
 
-    // Dashboard View
+    // --- MAIN DASHBOARD ---
     return (
         <div className="min-h-screen bg-slate-50 font-['Cairo'] pb-24" dir="rtl">
 
@@ -192,20 +251,29 @@ const DriverDashboard = ({ onAuthenticate, onPay, onScan, garageName, parkingTim
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={onBack}
+                            onClick={handleLogout}
                             className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
                         >
-                            <ChevronRight size={20} />
+                            <LogOut size={20} />
                         </button>
                         <div>
                             <h1 className="text-xl font-bold text-slate-900">مسار اليوم</h1>
                             <p className="text-slate-500 text-sm">{students.length} طلاب في القائمة</p>
                         </div>
                     </div>
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
-                        <User className="text-slate-600" />
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden">
+                        {driverProfile?.profile_picture ? (
+                            <img src={driverProfile.profile_picture} alt="Driver" className="w-full h-full object-cover" />
+                        ) : (
+                            <User className="text-slate-600" />
+                        )}
                     </div>
                 </div>
+                {driverProfile?.status === 'PENDING' && (
+                    <div className="bg-yellow-50 text-yellow-700 text-xs p-2 rounded-lg mt-2 text-center border border-yellow-200">
+                        حسابك قيد المراجعة من قبل الإدارة.
+                    </div>
+                )}
             </div>
 
 

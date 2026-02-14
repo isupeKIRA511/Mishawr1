@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { User, Bus, ChevronLeft, Users, MapPin, Shield, Briefcase, ArrowRight, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const LandingScreen = ({ onSelectRole, loading, showRoles, onShowRolesChange, onRegister }) => {
-    // const [showRoles, setShowRoles] = useState(false); // Removed local state
+const LandingScreen = () => {
+    const navigate = useNavigate();
     const [currentSlide, setCurrentSlide] = useState(0);
 
     const slides = [
@@ -45,101 +46,15 @@ const LandingScreen = ({ onSelectRole, loading, showRoles, onShowRolesChange, on
     ];
 
     useEffect(() => {
-        if (!showRoles) {
-            const timer = setInterval(() => {
-                setCurrentSlide((prev) => (prev + 1) % slides.length);
-            }, 5000);
-            return () => clearInterval(timer);
-        }
-    }, [showRoles, slides.length]);
+        const timer = setInterval(() => {
+            setCurrentSlide((prev) => (prev + 1) % slides.length);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [slides.length]);
 
     const handleStart = () => {
-        onShowRolesChange(true);
+        navigate('/login');
     };
-
-    if (showRoles) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-['Cairo']">
-                <div className="w-full max-w-md space-y-6">
-                    <button
-                        onClick={() => onShowRolesChange(false)}
-                        className="flex items-center text-slate-500 hover:text-slate-800 transition-colors mb-4"
-                    >
-                        <ArrowRight className="w-5 h-5 ml-1" />
-                        العودة
-                    </button>
-
-                    <div className="text-center mb-8">
-                        <h2 className="text-2xl font-bold text-slate-900">اختر نوع الحساب</h2>
-                        <p className="text-slate-500">من فضلك اختر صفتك للمتابعة</p>
-                    </div>
-
-                    <div className="grid gap-4">
-                        <button
-                            onClick={() => onSelectRole('student')}
-                            disabled={loading}
-                            className={`group relative flex items-center p-6 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-500 transition-all duration-300 w-full text-right ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition-colors">
-                                <User className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <div className="mr-4 flex-1">
-                                <h3 className="text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                                    أنا طالب
-                                </h3>
-                                <p className="text-sm text-slate-500">تابع رحلاتك واشتراكك بسهولة</p>
-                            </div>
-                            <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                        </button>
-
-                        <button
-                            onClick={() => onSelectRole('driver')}
-                            disabled={loading}
-                            className={`group relative flex items-center p-6 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-500 transition-all duration-300 w-full text-right ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <div className="p-3 bg-green-50 rounded-xl group-hover:bg-green-100 transition-colors">
-                                <Bus className="w-6 h-6 text-green-600" />
-                            </div>
-                            <div className="mr-4 flex-1">
-                                <h3 className="text-lg font-bold text-slate-900 group-hover:text-green-600 transition-colors">
-                                    أنا سائق
-                                </h3>
-                                <p className="text-sm text-slate-500">إدارة الركاب والرحلات</p>
-                            </div>
-                            <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-green-500 transition-colors" />
-                        </button>
-
-                        <button
-                            onClick={() => onSelectRole('parent')}
-                            disabled={loading}
-                            className={`group relative flex items-center p-6 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:border-purple-500 transition-all duration-300 w-full text-right ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <div className="p-3 bg-purple-50 rounded-xl group-hover:bg-purple-100 transition-colors">
-                                <Users className="w-6 h-6 text-purple-600" />
-                            </div>
-                            <div className="mr-4 flex-1">
-                                <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors">
-                                    أنا ولي أمر
-                                </h3>
-                                <p className="text-sm text-slate-500">متابعة الأبناء والمدفوعات</p>
-                            </div>
-                            <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-purple-500 transition-colors" />
-                        </button>
-                    </div>
-
-                    <div className="text-center mt-6">
-                        <p className="text-slate-500 text-sm mb-2">ليس لديك حساب؟</p>
-                        <button
-                            onClick={onRegister}
-                            className="text-blue-600 font-bold hover:underline"
-                        >
-                            إنشاء حساب جديد
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen bg-white flex flex-col font-['Cairo'] relative overflow-hidden">

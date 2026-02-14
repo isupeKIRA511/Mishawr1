@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, Navigate } from 'react-router-dom'
 import axios from 'axios'
 import api from './api/axios'
 import LandingScreen from './components/LandingScreen'
 import StudentDashboard from './components/StudentDashboard'
 import DriverDashboard from './components/DriverDashboard'
 import ParentDashboard from './components/ParentDashboard'
+import Login from './components/Login'
 
 import Register from './components/Register'
 
@@ -14,8 +15,6 @@ export default function App() {
   const [userData, setUserData] = useState(null)
   const [serverToken, setServerToken] = useState('')
   const [loading, setLoading] = useState(false)
-  const [view, setView] = useState('landing') // landing, register, student, driver, parent
-  const [showLandingRoles, setShowLandingRoles] = useState(false)
 
   const authCodeRef = useRef('');
   const tokenRef = useRef('');
@@ -43,74 +42,38 @@ export default function App() {
   const handleScan = scanDirect;
   const handlePay = pay;
 
-  const handleLogin = async (role) => {
-    // Legacy mock login - should be updated or removed if using full Auth flow
-    setUserData({ name: role === 'student' ? 'Student User' : 'Driver User', role });
-    setView(role);
-  }
-
-  const handleBackToLogin = () => {
-    setView('landing')
-    setShowLandingRoles(true)
-  }
-
-  const handleRegisterSuccess = (role) => {
-    // Redirect to login or specific dashboard login view
-    // For now, let's go back to landing so they can login with their new account
-    setView('landing');
-    setShowLandingRoles(true);
-  }
-
-  // Function to navigate to register page
-  const handleGoToRegister = () => {
-    setView('register');
-  };
-
   return (
     <>
-      {view === 'landing' && (
-        <LandingScreen
-          onSelectRole={handleLogin}
-          loading={loading}
-          showRoles={showLandingRoles}
-          onShowRolesChange={setShowLandingRoles}
-          onRegister={handleGoToRegister}
-        />
-      )}
+      <Routes>
+        <Route path="/" element={<LandingScreen />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
-      {view === 'register' && (
-        <Register
-          onBack={handleBackToLogin}
-          onRegisterSuccess={handleRegisterSuccess}
-        />
-      )}
+        <Route path="/student-dashboard" element={
+          <StudentDashboard
+            authCode={authCode}
+            onScan={handleScan}
+            onPay={handlePay}
+          />
+        } />
 
-      {view === 'student' && (
-        <StudentDashboard
-          userData={userData}
-          authCode={authCode}
-          onBack={handleBackToLogin}
-          onScan={handleScan}
-          onPay={handlePay}
-        />
-      )}
+        <Route path="/driver-dashboard" element={
+          <DriverDashboard
+            onScan={handleScan}
+          />
+        } />
 
-      {view === 'driver' && (
-        <DriverDashboard
-          onBack={handleBackToLogin}
-          onScan={handleScan}
-        />
-      )}
+        <Route path="/parent-dashboard" element={
+          <ParentDashboard
+            onPay={handlePay}
+          />
+        } />
 
-      {view === 'parent' && (
-        <ParentDashboard
-          onBack={handleBackToLogin}
-          onPay={handlePay}
-        />
-      )}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
 
       <div className="fixed bottom-4 left-4 text-[10px] text-slate-300 bg-slate-900/50 px-2 py-1 rounded backdrop-blur-sm pointer-events-none z-50 ltr" dir="ltr">
-        Build: Dev | Auth: {authCode ? 'OK' : 'No'} | View: {view}
+        Build: Dev | Auth: {authCode ? 'OK' : 'No'} | Routes Active
       </div>
     </>
   )
